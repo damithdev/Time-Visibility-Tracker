@@ -5,6 +5,8 @@ const { promisify } = require('util');
 
 const execAsync = promisify(exec);
 
+const CHECK_INTERVAL_MS = 60000; // Check every minute
+
 class TimeTracker {
   constructor(dataDir = path.join(__dirname, '../data')) {
     this.dataDir = dataDir;
@@ -54,12 +56,11 @@ class TimeTracker {
 
   categorizeActivity(appName) {
     const categories = {
-      'Communication': ['Slack', 'Microsoft Teams', 'Teams', 'Discord', 'Zoom', 'Skype', 'WhatsApp', 'Telegram'],
+      'Communication': ['Slack', 'Microsoft Teams', 'Discord', 'Zoom', 'Skype', 'WhatsApp', 'Telegram', 'Meet', 'Webex'],
       'Email': ['Mail', 'Outlook', 'Gmail', 'Thunderbird'],
       'Development': ['Code', 'Visual Studio', 'IntelliJ', 'Eclipse', 'Xcode', 'Terminal', 'iTerm', 'Vim', 'Emacs'],
       'Browser': ['Chrome', 'Firefox', 'Safari', 'Edge', 'Brave'],
-      'Documentation': ['Word', 'Docs', 'Notion', 'Confluence', 'Evernote'],
-      'Meeting': ['Zoom', 'Teams', 'Meet', 'Webex']
+      'Documentation': ['Word', 'Docs', 'Notion', 'Confluence', 'Evernote']
     };
 
     for (const [category, apps] of Object.entries(categories)) {
@@ -94,7 +95,7 @@ class TimeTracker {
       };
       
       this.currentSession.activities.push(activity);
-    }, 60000); // Check every minute
+    }, CHECK_INTERVAL_MS);
 
     return { success: true, message: 'Time tracking started', sessionId: this.currentSession.id };
   }
