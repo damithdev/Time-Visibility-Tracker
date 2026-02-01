@@ -61,10 +61,7 @@ class SQLiteStorage:
     @contextmanager
     def _get_connection(self) -> Iterator[sqlite3.Connection]:
         """Get a database connection with row factory."""
-        conn = sqlite3.connect(
-            self.db_path,
-            detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES,
-        )
+        conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         try:
             yield conn

@@ -1,5 +1,6 @@
 """Configuration management for Time Visibility Tracker."""
 
+import copy
 import os
 from pathlib import Path
 
@@ -39,7 +40,7 @@ def load_config() -> dict:
     Returns:
         Configuration dictionary.
     """
-    config = DEFAULT_CONFIG.copy()
+    config = copy.deepcopy(DEFAULT_CONFIG)
     config_path = get_config_path()
 
     if config_path.exists():
