@@ -1,5 +1,8 @@
 """Command-line interface for Time Visibility Tracker."""
 
+import os
+import platform
+import subprocess
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -19,11 +22,23 @@ from tvt.config import (
     save_config,
     save_credentials,
 )
+from tvt.process_manager import (
+    cleanup_stale_pid_file,
+    clear_pid_file,
+    get_daemon_pid,
+    read_pid_file,
+    write_pid_file,
+)
 from tvt.storage.sqlite import SQLiteStorage
 from tvt.summary import (
     export_summary_csv,
     generate_daily_summary,
     generate_weekly_summary,
+)
+from tvt.windows_service import (
+    create_scheduled_task,
+    delete_scheduled_task,
+    is_task_scheduled,
 )
 
 console = Console()
@@ -65,8 +80,8 @@ def init():
     console.print(
         "To track Slack presence and huddles, you need a User OAuth Token.\n"
         "Create a Slack app at https://api.slack.com/apps with these scopes:\n"
-        "  - users:read\n"
-        "  - users:read.presence (for presence tracking)\n"
+        "  - users:read (for presence)\n"
+        "  - users.profile:read (for huddle status)\n"
         "  - dnd:read (for DND status)\n"
     )
 
@@ -142,13 +157,35 @@ def collect(daemon: bool, interval: int, source: str):
         sys.exit(1)
 
     if daemon:
-        console.print(
-            f"[bold]Starting continuous collection from {source}[/bold]\n"
-            f"Interval: {interval} seconds\n"
-            "Press Ctrl+C to stop.\n"
-        )
-        collector.start(interval_seconds=interval)
-        console.print("\n[yellow]Collection stopped.[/yellow]")
+        # Clean up stale PID file from previous crash
+        cleanup_stale_pid_file()
+
+        # Check if daemon is already running
+        existing_pid = get_daemon_pid()
+        if existing_pid:
+            console.print(
+                f"[yellow]Daemon already running with PID {existing_pid}.[/yellow]"
+            )
+            sys.exit(1)
+
+        # Write PID file for this process
+        try:
+            write_pid_file(os.getpid())
+        except OSError as e:
+            console.print(f"[red]Error: Could not write PID file: {e}[/red]")
+            sys.exit(1)
+
+        try:
+            console.print(
+                f"[bold]Starting continuous collection from {source}[/bold]\n"
+                f"Interval: {interval} seconds\n"
+                "Press Ctrl+C to stop.\n"
+            )
+            collector.start(interval_seconds=interval)
+            console.print("\n[yellow]Collection stopped.[/yellow]")
+        finally:
+            # Clean up PID file on exit
+            clear_pid_file()
     else:
         console.print(f"[bold]Collecting from {source}...[/bold]")
         data = collector.run_once()
@@ -280,6 +317,157 @@ def status():
         console.print("\n[green]Slack credentials configured[/green]")
     else:
         console.print("\n[yellow]Slack credentials not configured[/yellow]")
+
+
+@main.group()
+def autostart():
+    """Manage autostart configuration for TVT daemon."""
+    pass
+
+
+@autostart.command()
+@click.option("--start-now", is_flag=True, help="Start daemon immediately after enabling")
+def enable(start_now: bool):
+    """Enable autostart via Windows Task Scheduler.
+
+    Creates a task that runs at user login. Optionally starts the daemon now.
+    """
+    if platform.system() != "Windows":
+        console.print("[red]Error: Autostart is only supported on Windows.[/red]")
+        sys.exit(1)
+
+    config = load_config()
+
+    # Create the Task Scheduler task
+    if not create_scheduled_task():
+        console.print("[red]Error: Failed to create Task Scheduler task.[/red]")
+        sys.exit(1)
+
+    # Update config
+    config["autostart"]["enabled"] = True
+    config["autostart"]["last_enabled_at"] = datetime.now().isoformat()
+    save_config(config)
+
+    console.print("[green]Autostart enabled![/green]")
+    console.print(
+        "TVT daemon will start automatically at next login.\n"
+    )
+
+    # Start daemon now if requested
+    if start_now:
+        # Check if daemon is already running
+        existing_pid = get_daemon_pid()
+        if existing_pid:
+            console.print(f"[yellow]Daemon already running with PID {existing_pid}.[/yellow]")
+            return
+
+        console.print("Starting daemon now...")
+        try:
+            # Start daemon in a detached process (no window)
+            subprocess.Popen(
+                [sys.executable, "-m", "tvt", "collect", "--daemon"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=subprocess.CREATE_NO_WINDOW,
+            )
+            console.print("[green]Daemon started.[/green]")
+        except Exception as e:
+            console.print(f"[yellow]Warning: Could not start daemon: {e}[/yellow]")
+
+
+@autostart.command()
+@click.option("--stop-daemon", is_flag=True, help="Stop the daemon when disabling")
+def disable(stop_daemon: bool):
+    """Disable autostart and remove the Task Scheduler task.
+
+    Optionally stops the daemon if it's running.
+    """
+    if platform.system() != "Windows":
+        console.print("[red]Error: Autostart is only supported on Windows.[/red]")
+        sys.exit(1)
+
+    config = load_config()
+
+    # Delete the Task Scheduler task
+    if not delete_scheduled_task():
+        console.print("[red]Error: Failed to delete Task Scheduler task.[/red]")
+        sys.exit(1)
+
+    # Update config
+    config["autostart"]["enabled"] = False
+    config["autostart"]["last_disabled_at"] = datetime.now().isoformat()
+    save_config(config)
+
+    console.print("[green]Autostart disabled.[/green]")
+
+    # Stop daemon if requested
+    if stop_daemon:
+        daemon_pid = get_daemon_pid()
+        if daemon_pid:
+            try:
+                os.kill(daemon_pid, 15)  # SIGTERM
+                console.print("[green]Daemon stopped.[/green]")
+            except (OSError, ProcessLookupError):
+                console.print(
+                    "[yellow]Warning: Could not stop daemon (may already be stopped).[/yellow]"
+                )
+                clear_pid_file()
+        else:
+            console.print("[dim]Daemon not running.[/dim]")
+
+
+@autostart.command()
+def status():
+    """Show autostart and daemon status."""
+    if platform.system() != "Windows":
+        console.print("[red]Error: Autostart is only supported on Windows.[/red]")
+        sys.exit(1)
+
+    config = load_config()
+    autostart_config = config.get("autostart", {})
+
+    console.print("[bold]Autostart Status[/bold]\n")
+
+    # Config state
+    enabled = autostart_config.get("enabled", False)
+    enabled_str = "[green]enabled[/green]" if enabled else "[dim]disabled[/dim]"
+    console.print(f"Config state: {enabled_str}")
+
+    last_enabled = autostart_config.get("last_enabled_at")
+    if last_enabled:
+        console.print(f"  Last enabled: {last_enabled}")
+
+    last_disabled = autostart_config.get("last_disabled_at")
+    if last_disabled:
+        console.print(f"  Last disabled: {last_disabled}")
+
+    # Task Scheduler state
+    console.print()
+    task_exists = is_task_scheduled()
+    task_str = "[green]exists[/green]" if task_exists else "[dim]not scheduled[/dim]"
+    console.print(f"Task Scheduler: {task_str}")
+
+    # Daemon state
+    console.print()
+    daemon_pid = get_daemon_pid()
+    if daemon_pid:
+        console.print(f"[green]Daemon running[/green] (PID: {daemon_pid})")
+    else:
+        console.print("[dim]Daemon not running[/dim]")
+
+    # Summary
+    console.print()
+    if enabled and task_exists and daemon_pid:
+        console.print("[green]✓ Everything is configured and running[/green]")
+    elif enabled and task_exists:
+        console.print("[yellow]✓ Autostart configured (daemon will start at login)[/yellow]")
+    elif enabled and not task_exists:
+        console.print(
+            "[yellow]⚠ Config says enabled but task not found[/yellow]\n"
+            "Run [bold]tvt autostart enable[/bold] to recreate the task."
+        )
+    else:
+        console.print("[dim]- Autostart is not configured[/dim]")
 
 
 @main.command()

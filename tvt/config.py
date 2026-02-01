@@ -21,6 +21,11 @@ DEFAULT_CONFIG = {
             "interval_seconds": 30,
         },
     },
+    "autostart": {
+        "enabled": False,
+        "last_enabled_at": None,
+        "last_disabled_at": None,
+    },
 }
 
 

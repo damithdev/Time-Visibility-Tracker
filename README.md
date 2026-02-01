@@ -67,8 +67,8 @@ To track Slack presence and huddles, you need to create a Slack app:
 1. Go to [https://api.slack.com/apps](https://api.slack.com/apps)
 2. Click "Create New App" → "From scratch"
 3. Add these **User Token Scopes** under OAuth & Permissions:
-   - `users:read`
-   - `users:read.presence` (for presence tracking)
+   - `users:read` (for presence)
+   - `users.profile:read` (for huddle status)
    - `dnd:read` (for DND status)
 4. Install the app to your workspace
 5. Copy the **User OAuth Token** (starts with `xoxp-`)
@@ -108,6 +108,29 @@ TVT uses SQLite for local data storage. The database contains:
 
 Database location: `~/.tvt/data.db` (configurable)
 
+## Autostart (Windows Only)
+
+TVT can automatically start the daemon at user login using Windows Task Scheduler:
+
+```bash
+# Enable autostart and start daemon now
+tvt autostart enable --start-now
+
+# Check autostart status
+tvt autostart status
+
+# Disable autostart and stop daemon
+tvt autostart disable --stop-daemon
+```
+
+The autostart feature:
+- Creates a Windows Task Scheduler task that runs at login
+- Prevents duplicate daemon instances
+- Stores configuration in `~/.tvt/config.yaml`
+- Uses `highest` priority for better performance
+
+Note: Autostart is only supported on Windows. For other platforms, use your system's startup methods.
+
 ## Commands Reference
 
 | Command | Description |
@@ -120,6 +143,9 @@ Database location: `~/.tvt/data.db` (configurable)
 | `tvt summary --date 2025-01-15` | Show specific day |
 | `tvt export --start DATE` | Export data to CSV |
 | `tvt status` | Show current status |
+| `tvt autostart enable` | Enable autostart at login (Windows) |
+| `tvt autostart disable` | Disable autostart (Windows) |
+| `tvt autostart status` | Check autostart status (Windows) |
 | `tvt dashboard` | Open web dashboard (Phase 1) |
 
 ## Development
