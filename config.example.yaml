@@ -1,0 +1,18 @@
+# Time Visibility Tracker Configuration
+# Copy this file to ~/.tvt/config.yaml and customize
+
+database:
+  # Path to SQLite database file
+  path: ~/.tvt/data.db
+
+collectors:
+  slack:
+    # Set to true to enable Slack tracking
+    enabled: false
+    # How often to poll Slack API (in seconds)
+    interval_seconds: 30
+
+  teams:
+    # Microsoft Teams integration (coming in Phase 1)
+    enabled: false
+    interval_seconds: 30
