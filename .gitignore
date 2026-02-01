@@ -1,0 +1,6 @@
+node_modules/
+data/
+*.log
+.DS_Store
+time-tracker-export-*.json
+time-tracker-export-*.csv
