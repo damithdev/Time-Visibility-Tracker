@@ -110,6 +110,18 @@ def collect(daemon: bool, interval: int, source: str):
 
     By default, runs a single collection cycle. Use --daemon to run continuously.
     """
+    # Validate interval bounds to prevent API rate limiting issues
+    if interval < 10:
+        console.print(
+            "[red]Error: Interval must be at least 10 seconds to avoid API rate limiting.[/red]"
+        )
+        sys.exit(1)
+    if interval > 3600:
+        console.print(
+            "[red]Error: Interval cannot exceed 3600 seconds (1 hour).[/red]"
+        )
+        sys.exit(1)
+
     # Get storage
     storage = SQLiteStorage(get_db_path())
 
@@ -213,6 +225,13 @@ def export(start: str, end: str | None, output: str | None):
             sys.exit(1)
     else:
         end_date = datetime.now()
+
+    # Validate that end_date is not before start_date
+    if end_date < start_date:
+        console.print(
+            "[red]Error: End date cannot be before start date.[/red]"
+        )
+        sys.exit(1)
 
     if output:
         with open(output, "w", newline="") as f:

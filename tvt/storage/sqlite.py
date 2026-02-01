@@ -124,22 +124,25 @@ class SQLiteStorage:
         event_type: EventType | None = None,
     ) -> list[Event]:
         """Query events with optional filters."""
-        query = "SELECT * FROM events WHERE 1=1"
+        conditions: list[str] = []
         params: list = []
 
         if start_date:
-            query += " AND start_time >= ?"
+            conditions.append("start_time >= ?")
             params.append(start_date.isoformat())
         if end_date:
-            query += " AND start_time <= ?"
+            conditions.append("start_time <= ?")
             params.append(end_date.isoformat())
         if source:
-            query += " AND source = ?"
+            conditions.append("source = ?")
             params.append(source.value)
         if event_type:
-            query += " AND event_type = ?"
+            conditions.append("event_type = ?")
             params.append(event_type.value)
 
+        query = "SELECT * FROM events"
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
         query += " ORDER BY start_time DESC"
 
         with self._get_connection() as conn:
@@ -154,19 +157,22 @@ class SQLiteStorage:
         source: Source | None = None,
     ) -> list[dict]:
         """Query presence states with optional filters."""
-        query = "SELECT * FROM presence_states WHERE 1=1"
+        conditions: list[str] = []
         params: list = []
 
         if start_date:
-            query += " AND timestamp >= ?"
+            conditions.append("timestamp >= ?")
             params.append(start_date.isoformat())
         if end_date:
-            query += " AND timestamp <= ?"
+            conditions.append("timestamp <= ?")
             params.append(end_date.isoformat())
         if source:
-            query += " AND source = ?"
+            conditions.append("source = ?")
             params.append(source.value)
 
+        query = "SELECT * FROM presence_states"
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
         query += " ORDER BY timestamp ASC"
 
         with self._get_connection() as conn:

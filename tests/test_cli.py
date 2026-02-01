@@ -173,6 +173,17 @@ class TestExportCommand:
         assert result.exit_code == 1
         assert "Invalid end date" in result.output
 
+    def test_export_end_before_start(self, cli_runner, isolated_config):
+        """Test export fails when end date is before start date."""
+        with patch("tvt.cli.get_db_path", return_value=isolated_config["db_path"]):
+            result = cli_runner.invoke(
+                main,
+                ["export", "--start", "2025-01-15", "--end", "2025-01-01"],
+            )
+
+        assert result.exit_code == 1
+        assert "cannot be before start date" in result.output.lower()
+
 
 class TestStatusCommand:
     """Tests for status command."""
@@ -295,6 +306,35 @@ class TestCollectCommand:
 
         assert result.exit_code == 0
         assert "No data collected" in result.output
+
+    def test_collect_interval_too_small(self, cli_runner, isolated_config):
+        """Test collect fails with interval less than 10 seconds."""
+        with patch("tvt.cli.get_db_path", return_value=isolated_config["db_path"]):
+            result = cli_runner.invoke(main, ["collect", "--interval", "5"])
+
+        assert result.exit_code == 1
+        assert "at least 10 seconds" in result.output.lower()
+
+    def test_collect_interval_too_large(self, cli_runner, isolated_config):
+        """Test collect fails with interval greater than 3600 seconds."""
+        with patch("tvt.cli.get_db_path", return_value=isolated_config["db_path"]):
+            result = cli_runner.invoke(main, ["collect", "--interval", "7200"])
+
+        assert result.exit_code == 1
+        assert "cannot exceed 3600" in result.output.lower()
+
+    def test_collect_interval_valid_bounds(self, cli_runner, isolated_config):
+        """Test collect accepts valid interval values."""
+        mock_collector = MagicMock()
+        mock_collector.run_once.return_value = {"state": "active", "in_huddle": False}
+
+        # Test minimum valid interval
+        with patch("tvt.cli.get_db_path", return_value=isolated_config["db_path"]):
+            with patch("tvt.cli.get_slack_token", return_value="xoxp-test"):
+                with patch("tvt.collectors.slack.SlackCollector", return_value=mock_collector):
+                    result = cli_runner.invoke(main, ["collect", "--interval", "10"])
+
+        assert result.exit_code == 0
 
 
 class TestDashboardCommand:

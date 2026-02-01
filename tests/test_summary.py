@@ -3,10 +3,9 @@
 import io
 from datetime import datetime, timedelta
 
-import pytest
 from rich.console import Console
 
-from tvt.storage.models import Event, EventType, Source
+from tvt.storage.models import Source
 from tvt.summary import (
     export_summary_csv,
     format_duration,

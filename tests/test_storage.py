@@ -1,11 +1,8 @@
 """Tests for storage module."""
 
-import json
 import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
-
-import pytest
 
 from tvt.storage.models import Event, EventType, Source
 from tvt.storage.sqlite import SQLiteStorage
